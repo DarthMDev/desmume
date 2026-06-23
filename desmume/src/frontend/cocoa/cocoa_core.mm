@@ -42,6 +42,51 @@
 #include "../../wifi.h"
 #undef BOOL
 
+#ifdef HAVE_LUA
+#define LUA_CORE
+#define loslib_c
+#define liolib_c
+#define lstrlib_c
+#define lbaselib_c
+
+extern "C" {
+#include "lua/lapi.c"
+#include "lua/lauxlib.c"
+#include "lua/lbaselib.c"
+#include "lua/lcode.c"
+#include "lua/ldblib.c"
+#include "lua/ldebug.c"
+#include "lua/ldo.c"
+#include "lua/ldump.c"
+#include "lua/lfunc.c"
+#include "lua/lgc.c"
+#include "lua/linit.c"
+#include "lua/liolib.c"
+#include "lua/llex.c"
+#include "lua/lmathlib.c"
+#include "lua/lmem.c"
+#include "lua/loadlib.c"
+#include "lua/lobject.c"
+#include "lua/lopcodes.c"
+#include "lua/loslib.c"
+#include "lua/lparser.c"
+#include "lua/lstate.c"
+#include "lua/lstring.c"
+#include "lua/lstrlib.c"
+#include "lua/ltable.c"
+#include "lua/ltablib.c"
+#include "lua/ltm.c"
+#include "lua/lundump.c"
+#include "lua/lvm.c"
+#include "lua/lzio.c"
+}
+
+#undef tostring
+
+#include "MacLuaScriptConsole.mm"
+#include "../../lua-engine.cpp"
+#endif
+
 //accessed from other files
 volatile bool execute = true;
 
@@ -1196,9 +1241,17 @@ static void* RunCoreThread(void *arg)
 		pthread_rwlock_wrlock(&param->rwlockCoreExecute);
 		cheatManager->ApplyToMaster();
 		cheatManager->ApplyPendingInternalCheatWrites();
+#ifdef HAVE_LUA
+		NDS_beginProcessingInput();
+		CallRegisteredLuaFunctions(LUACALL_BEFOREEMULATION);
+		NDS_endProcessingInput();
+#endif
 		NDS_exec<false>();
 		SPU_Emulate_user();
 		execControl->FetchOutputPostNDSExec();
+#ifdef HAVE_LUA
+		CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION);
+#endif
 		pthread_rwlock_unlock(&param->rwlockCoreExecute);
 		
 		// Check if an internal execution error occurred that halted the emulation.
@@ -1400,3 +1453,4 @@ static void* RunCoreThread(void *arg)
 	
 	return NULL;
 }
+
