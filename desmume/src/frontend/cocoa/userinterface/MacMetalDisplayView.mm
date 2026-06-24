@@ -1371,7 +1371,7 @@
 	MTLRenderPipelineDescriptor *luaPipelineDesc = [[MTLRenderPipelineDescriptor alloc] init];
 	[luaPipelineDesc setAlphaToOneEnabled:NO];
 	[luaPipelineDesc setVertexFunction:[[[self sharedData] defaultLibrary] newFunctionWithName:@"display_output_vertex"]];
-	[luaPipelineDesc setFragmentFunction:[[[self sharedData] defaultLibrary] newFunctionWithName:@"output_filter_nearest"]];
+	[luaPipelineDesc setFragmentFunction:[[[self sharedData] defaultLibrary] newFunctionWithName:@"lua_overlay_filter"]];
 	
 	[[[luaPipelineDesc colorAttachments] objectAtIndexedSubscript:0] setPixelFormat:[self drawableFormat]];
 	[[[luaPipelineDesc colorAttachments] objectAtIndexedSubscript:0] setBlendingEnabled:YES];
@@ -2276,11 +2276,13 @@
 			isLuaOverlayTexCreated = YES;
 		}
 		
-		uint32_t *luaBuffer = lua_script_get_graphics_buffer();
-		
+		uint32_t *luaBuffer = lua_script_lock_overlay_buffer();
+
 		MTLRegion region = MTLRegionMake2D(0, 0, 256, 192);
 		[texLuaOverlay[NDSDisplayID_Main] replaceRegion:region mipmapLevel:0 withBytes:luaBuffer bytesPerRow:256 * sizeof(uint32_t)];
 		[texLuaOverlay[NDSDisplayID_Touch] replaceRegion:region mipmapLevel:0 withBytes:luaBuffer + (256 * 192) bytesPerRow:256 * sizeof(uint32_t)];
+
+		lua_script_unlock_overlay_buffer();
 		
 		[rce setRenderPipelineState:luaOverlayPipeline];
 		[rce setVertexBytes:_vtxPositionBuffer length:sizeof(_vtxPositionBuffer) atIndex:0];

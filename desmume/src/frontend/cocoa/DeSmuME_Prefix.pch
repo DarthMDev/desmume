@@ -24,7 +24,7 @@
 #define DESMUME_COCOA
 #define ENABLE_OPENGL_STANDARD
 #define HAVE_LIBZ
-#ifdef GDB_STUB
+#ifdef ENABLE_LUA_COCOA
 #define HAVE_LUA
 #define LUA_USE_POSIX
 #define LUA_USE_DLOPEN

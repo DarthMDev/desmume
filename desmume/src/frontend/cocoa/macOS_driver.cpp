@@ -163,6 +163,16 @@ BaseDriver::eStepMainLoopResult macOS_driver::EMU_StepMainLoop(bool allowSleep, 
 
 	if (!disableCore)
 	{
+		// Apply the user's controller/touch input for this frame. The normal core
+		// loop does this every frame; without it, a Lua script driving execution
+		// via emu.frameadvance() would leave the game unable to receive input.
+		ClientInputHandler *inputHandler = this->__execControl->GetClientInputHandler();
+		if (inputHandler != NULL)
+		{
+			inputHandler->ProcessInputs();
+			inputHandler->ApplyInputs();
+		}
+
 #ifdef HAVE_LUA
 		lua_script_clear_graphics_buffer();
 		NDS_beginProcessingInput();
@@ -176,6 +186,10 @@ BaseDriver::eStepMainLoopResult macOS_driver::EMU_StepMainLoop(bool allowSleep, 
 
 #ifdef HAVE_LUA
 		CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION);
+		// Flush GUI draw calls deferred from the script body (gui.drawbox, etc.),
+		// then publish the completed overlay frame to the renderer.
+		CallRegisteredLuaFunctions(LUACALL_AFTEREMULATIONGUI);
+		lua_script_present_graphics_buffer();
 #endif
 	}
 

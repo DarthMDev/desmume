@@ -19,6 +19,7 @@
 #import "MacLuaScriptConsole.h"
 #include "lua-engine.h"
 #include <string>
+#include <pthread.h>
 
 #ifdef HAVE_LUA
 #include "../../driver.h"
@@ -437,14 +438,42 @@ void lua_script_close_all(void) {
 	}
 }
 
-static uint32_t macLuaGraphicsBuffer[256 * 384];
+// The Lua graphics overlay is shared across threads: the Lua engine draws into
+// it on the background emulation core thread, while the OpenGL/Metal renderer
+// uploads it as a texture on the display thread. To avoid the renderer reading a
+// half-drawn or half-cleared frame, we double-buffer it. The Lua engine always
+// draws into the back buffer; once per frame the completed frame is copied to the
+// front buffer under a mutex, and the renderer reads only the front buffer (under
+// the same mutex).
+static uint32_t macLuaGraphicsBufferBack[256 * 384];
+static uint32_t macLuaGraphicsBufferFront[256 * 384];
+static pthread_mutex_t macLuaGraphicsBufferMutex = PTHREAD_MUTEX_INITIALIZER;
 
 uint32_t* lua_script_get_graphics_buffer(void) {
-	return macLuaGraphicsBuffer;
+	return macLuaGraphicsBufferBack;
 }
 
 void lua_script_clear_graphics_buffer(void) {
-	memset(macLuaGraphicsBuffer, 0, sizeof(macLuaGraphicsBuffer));
+	// Called at the start of a frame, before the deferred GUI draw calls are
+	// flushed. Only the core thread touches the back buffer, so no lock is needed.
+	memset(macLuaGraphicsBufferBack, 0, sizeof(macLuaGraphicsBufferBack));
+}
+
+void lua_script_present_graphics_buffer(void) {
+	// Called after the frame's GUI draw calls have been flushed into the back
+	// buffer. Publishes the completed frame to the front buffer for the renderer.
+	pthread_mutex_lock(&macLuaGraphicsBufferMutex);
+	memcpy(macLuaGraphicsBufferFront, macLuaGraphicsBufferBack, sizeof(macLuaGraphicsBufferFront));
+	pthread_mutex_unlock(&macLuaGraphicsBufferMutex);
+}
+
+uint32_t* lua_script_lock_overlay_buffer(void) {
+	pthread_mutex_lock(&macLuaGraphicsBufferMutex);
+	return macLuaGraphicsBufferFront;
+}
+
+void lua_script_unlock_overlay_buffer(void) {
+	pthread_mutex_unlock(&macLuaGraphicsBufferMutex);
 }
 
 #endif /* HAVE_LUA */

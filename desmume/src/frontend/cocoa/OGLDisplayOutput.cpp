@@ -346,11 +346,13 @@ static const char *PassthroughOutputFragShader_110 = {"\
 	IN_VARYING vec2 texCoord[1];\n\
 	uniform sampler2DRect tex;\n\
 	uniform float backlightIntensity;\n\
+	uniform bool isOverlay;\n\
 	\n\
 	void main()\n\
 	{\n\
-		FRAG_COLOR_VAR.rgb = SAMPLE3_TEX_RECT(tex, texCoord[0]) * backlightIntensity;\n\
-		FRAG_COLOR_VAR.a = 1.0;\n\
+		vec4 mainColor = SAMPLE4_TEX_RECT(tex, texCoord[0]);\n\
+		FRAG_COLOR_VAR.rgb = mainColor.rgb * backlightIntensity;\n\
+		FRAG_COLOR_VAR.a = isOverlay ? mainColor.a : 1.0;\n\
 	}\n\
 "};
 
@@ -7548,7 +7550,8 @@ OGLDisplayLayer::OGLDisplayLayer(OGLDisplayPresenter *oglVO)
 		_uniformViewSize = glGetUniformLocation(finalOutputProgramID, "viewSize");
 		_uniformRenderFlipped = glGetUniformLocation(finalOutputProgramID, "renderFlipped");
 		_uniformBacklightIntensity = glGetUniformLocation(finalOutputProgramID, "backlightIntensity");
-		
+		_uniformIsOverlay = glGetUniformLocation(finalOutputProgramID, "isOverlay");
+
 		GLint uniformTexSampler = glGetUniformLocation(finalOutputProgramID, "tex");
 		glUniform1i(uniformTexSampler, 0);
 		glUseProgram(0);
@@ -8319,13 +8322,15 @@ void OGLDisplayLayer::RenderOGL(bool isRenderingFlipped)
 			this->_isLuaOverlayTexCreated = true;
 		}
 		
-		uint32_t *luaBuffer = lua_script_get_graphics_buffer();
-		
+		uint32_t *luaBuffer = lua_script_lock_overlay_buffer();
+
 		glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Main]);
 		glTexSubImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, 0, 0, 256, 192, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, luaBuffer);
-		
+
 		glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Touch]);
 		glTexSubImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, 0, 0, 256, 192, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, luaBuffer + (256 * 192));
+
+		lua_script_unlock_overlay_buffer();
 		
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -8333,8 +8338,11 @@ void OGLDisplayLayer::RenderOGL(bool isRenderingFlipped)
 		if (isShaderSupported)
 		{
 			glUniform1f(this->_uniformBacklightIntensity, 1.0f);
+			// Draw the overlay with its own per-pixel alpha rather than the opaque
+			// alpha forced for the emulated screens, so it composites on top.
+			glUniform1i(this->_uniformIsOverlay, GL_TRUE);
 		}
-		
+
 		switch (this->_output->GetPresenterProperties().mode)
 		{
 			case ClientDisplayMode_Main:
@@ -8397,7 +8405,14 @@ void OGLDisplayLayer::RenderOGL(bool isRenderingFlipped)
 			default:
 				break;
 		}
-		
+
+		// Restore opaque output so the emulated screens drawn next frame are not
+		// blended away by a stale overlay flag.
+		if (isShaderSupported)
+		{
+			glUniform1i(this->_uniformIsOverlay, GL_FALSE);
+		}
+
 		glDisable(GL_BLEND);
 	}
 #endif

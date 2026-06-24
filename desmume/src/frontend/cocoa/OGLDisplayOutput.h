@@ -303,7 +303,8 @@ protected:
 	GLint _uniformViewSize;
 	GLint _uniformRenderFlipped;
 	GLint _uniformBacklightIntensity;
-	
+	GLint _uniformIsOverlay;
+
 public:
 	virtual ~OGLVideoLayer() {};
 	

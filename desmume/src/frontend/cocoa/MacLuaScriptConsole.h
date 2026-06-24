@@ -28,8 +28,20 @@ extern "C" {
 
 void lua_script_open_console(void);
 void lua_script_close_all(void);
+
+// Back buffer: the Lua engine draws into this on the emulation core thread.
 uint32_t* lua_script_get_graphics_buffer(void);
+// Clears the back buffer at the start of a frame, before GUI draws are flushed.
 void lua_script_clear_graphics_buffer(void);
+// Publishes the completed back buffer to the front buffer for the renderer.
+// Called once per frame after the frame's GUI draw calls have been flushed.
+void lua_script_present_graphics_buffer(void);
+
+// Front buffer: a stable snapshot of the last completed frame for the render
+// thread to upload. lock returns the buffer with the overlay mutex held; the
+// caller must call unlock once the upload is finished.
+uint32_t* lua_script_lock_overlay_buffer(void);
+void lua_script_unlock_overlay_buffer(void);
 
 #ifdef __cplusplus
 }

@@ -1260,6 +1260,10 @@ static void* RunCoreThread(void *arg)
 		execControl->FetchOutputPostNDSExec();
 #ifdef HAVE_LUA
 		CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION);
+		// Flush GUI draw calls deferred from the script body, then publish the
+		// completed overlay frame to the renderer.
+		CallRegisteredLuaFunctions(LUACALL_AFTEREMULATIONGUI);
+		lua_script_present_graphics_buffer();
 #endif
 		pthread_rwlock_unlock(&param->rwlockCoreExecute);
 		
