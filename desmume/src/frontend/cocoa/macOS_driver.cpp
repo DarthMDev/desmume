@@ -20,6 +20,13 @@
 #include "macOS_driver.h"
 #include "ClientAVCaptureObject.h"
 #include "ClientExecutionControl.h"
+#include "ClientVideoOutput.h"
+#include "NDSSystem.h"
+#include "SPU.h"
+#ifdef HAVE_LUA
+#include "lua-engine.h"
+#include "MacLuaScriptConsole.h"
+#endif
 
 
 pthread_mutex_t* macOS_driver::GetCoreThreadMutexLock()
@@ -88,4 +95,55 @@ void macOS_driver::EMU_DebugIdleWakeUp()
 	pthread_mutex_lock(this->__mutexThreadExecute);
 	pthread_rwlock_wrlock(this->__rwlockCoreExecute);
 	this->__execControl->SetIsInDebugTrap(false);
+}
+
+void macOS_driver::SetDisplayOutputManager(ClientDisplayViewOutputManager *displayOutputManager)
+{
+	this->__displayOutputManager = displayOutputManager;
+}
+
+extern "C" void macOS_PumpEvents();
+
+BaseDriver::eStepMainLoopResult macOS_driver::EMU_StepMainLoop(bool allowSleep, bool allowPause, int frameSkip, bool disableUser, bool disableCore)
+{
+	if (this->__execControl == NULL)
+	{
+		return ESTEP_DONE;
+	}
+
+	if (this->__execControl->GetExecutionBehavior() != ExecutionBehavior_Pause)
+	{
+		this->__execControl->SetExecutionBehavior(ExecutionBehavior_Pause);
+	}
+
+	pthread_rwlock_wrlock(this->__rwlockCoreExecute);
+
+	if (!disableCore)
+	{
+#ifdef HAVE_LUA
+		lua_script_clear_graphics_buffer();
+		NDS_beginProcessingInput();
+		CallRegisteredLuaFunctions(LUACALL_BEFOREEMULATION);
+		NDS_endProcessingInput();
+#endif
+
+		NDS_exec<false>();
+		SPU_Emulate_user();
+		this->__execControl->FetchOutputPostNDSExec();
+
+#ifdef HAVE_LUA
+		CallRegisteredLuaFunctions(LUACALL_AFTEREMULATION);
+#endif
+	}
+
+	pthread_rwlock_unlock(this->__rwlockCoreExecute);
+
+	if (!disableUser && this->__displayOutputManager != NULL)
+	{
+		this->__displayOutputManager->SetNDSFrameInfoToAll(this->__execControl->GetNDSFrameInfo());
+	}
+
+	macOS_PumpEvents();
+
+	return ESTEP_DONE;
 }

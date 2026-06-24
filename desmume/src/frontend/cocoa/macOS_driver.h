@@ -24,14 +24,18 @@
 
 class ClientExecutionControl;
 
+class ClientDisplayViewOutputManager;
+
 class macOS_driver : public BaseDriver
 {
 private:
 	pthread_mutex_t *__mutexThreadExecute;
 	pthread_rwlock_t *__rwlockCoreExecute;
 	ClientExecutionControl *__execControl;
+	ClientDisplayViewOutputManager *__displayOutputManager;
 	
 public:
+	macOS_driver() : __mutexThreadExecute(NULL), __rwlockCoreExecute(NULL), __execControl(NULL), __displayOutputManager(NULL) {}
 	virtual ~macOS_driver() {}
 	
 	pthread_mutex_t* GetCoreThreadMutexLock();
@@ -39,11 +43,13 @@ public:
 	pthread_rwlock_t* GetCoreExecuteRWLock();
 	void SetCoreExecuteRWLock(pthread_rwlock_t *theRwLock);
 	void SetExecutionControl(ClientExecutionControl *execControl);
+	void SetDisplayOutputManager(ClientDisplayViewOutputManager *displayOutputManager);
 	
 	virtual void AVI_SoundUpdate(void *soundData, int soundLen);
 	virtual bool AVI_IsRecording();
 	virtual bool WAV_IsRecording();
 	
+	virtual eStepMainLoopResult EMU_StepMainLoop(bool allowSleep, bool allowPause, int frameSkip, bool disableUser, bool disableCore);
 	virtual void EMU_DebugIdleEnter();
 	virtual void EMU_DebugIdleUpdate();
 	virtual void EMU_DebugIdleWakeUp();

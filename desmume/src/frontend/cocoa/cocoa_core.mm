@@ -240,6 +240,7 @@ volatile bool execute = true;
 	newDriver->SetCoreThreadMutexLock(&threadParam.mutexThreadExecute);
 	newDriver->SetCoreExecuteRWLock(&threadParam.rwlockCoreExecute);
 	newDriver->SetExecutionControl(execControl);
+	newDriver->SetDisplayOutputManager(macDisplayOutputManager);
 	driver = newDriver;
 	
 	frameStatus = @"---";
@@ -1453,5 +1454,23 @@ static void* RunCoreThread(void *arg)
 	}
 	
 	return NULL;
+}
+
+extern "C" void macOS_PumpEvents()
+{
+	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+	while (true)
+	{
+		NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny
+											untilDate:[NSDate dateWithTimeIntervalSinceNow:0.0]
+											   inMode:NSDefaultRunLoopMode
+											  dequeue:YES];
+		if (event == nil)
+		{
+			break;
+		}
+		[NSApp sendEvent:event];
+	}
+	[pool release];
 }
 
