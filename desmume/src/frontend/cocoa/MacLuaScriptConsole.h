@@ -20,7 +20,7 @@
 
 #ifdef HAVE_LUA
 
-#import <Cocoa/Cocoa.h>
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +28,8 @@ extern "C" {
 
 void lua_script_open_console(void);
 void lua_script_close_all(void);
+uint32_t* lua_script_get_graphics_buffer(void);
+void lua_script_clear_graphics_buffer(void);
 
 #ifdef __cplusplus
 }

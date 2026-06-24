@@ -1242,6 +1242,7 @@ static void* RunCoreThread(void *arg)
 		cheatManager->ApplyToMaster();
 		cheatManager->ApplyPendingInternalCheatWrites();
 #ifdef HAVE_LUA
+		lua_script_clear_graphics_buffer();
 		NDS_beginProcessingInput();
 		CallRegisteredLuaFunctions(LUACALL_BEFOREEMULATION);
 		NDS_endProcessingInput();

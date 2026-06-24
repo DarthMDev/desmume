@@ -428,4 +428,14 @@ void lua_script_close_all(void) {
 	}
 }
 
+static uint32_t macLuaGraphicsBuffer[256 * 384];
+
+uint32_t* lua_script_get_graphics_buffer(void) {
+	return macLuaGraphicsBuffer;
+}
+
+void lua_script_clear_graphics_buffer(void) {
+	memset(macLuaGraphicsBuffer, 0, sizeof(macLuaGraphicsBuffer));
+}
+
 #endif /* HAVE_LUA */

@@ -22,6 +22,11 @@
 #include "../../utils/colorspacehandler/colorspacehandler.h"
 #include "../../filter/videofilter.h"
 
+#ifdef HAVE_LUA
+#include "MacLuaScriptConsole.h"
+#include "../../lua-engine.h"
+#endif
+
 #include <sstream>
 
 #ifndef GL_R8
@@ -7572,6 +7577,10 @@ OGLDisplayLayer::OGLDisplayLayer(OGLDisplayPresenter *oglVO)
 		_shaderFilter[0] = NULL;
 		_shaderFilter[1] = NULL;
 	}
+	
+	_texLuaOverlay[0] = 0;
+	_texLuaOverlay[1] = 0;
+	_isLuaOverlayTexCreated = false;
 }
 
 OGLDisplayLayer::~OGLDisplayLayer()
@@ -7602,6 +7611,12 @@ OGLDisplayLayer::~OGLDisplayLayer()
 	pthread_rwlock_destroy(&this->_cpuFilterRWLock[NDSDisplayID_Touch][0]);
 	pthread_rwlock_destroy(&this->_cpuFilterRWLock[NDSDisplayID_Main][1]);
 	pthread_rwlock_destroy(&this->_cpuFilterRWLock[NDSDisplayID_Touch][1]);
+	
+	if (this->_isLuaOverlayTexCreated)
+	{
+		glDeleteTextures(2, this->_texLuaOverlay);
+		this->_isLuaOverlayTexCreated = false;
+	}
 }
 
 void OGLDisplayLayer::_UpdateRotationScaleOGL()
@@ -8285,6 +8300,107 @@ void OGLDisplayLayer::RenderOGL(bool isRenderingFlipped)
 		default:
 			break;
 	}
+	
+#ifdef HAVE_LUA
+	if (AnyLuaActive())
+	{
+		if (!this->_isLuaOverlayTexCreated)
+		{
+			glGenTextures(2, this->_texLuaOverlay);
+			for (int i = 0; i < 2; i++)
+			{
+				glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[i]);
+				glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+				glTexParameteri(GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+				glTexImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, 256, 192, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, NULL);
+			}
+			this->_isLuaOverlayTexCreated = true;
+		}
+		
+		uint32_t *luaBuffer = lua_script_get_graphics_buffer();
+		
+		glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Main]);
+		glTexSubImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, 0, 0, 256, 192, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, luaBuffer);
+		
+		glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Touch]);
+		glTexSubImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, 0, 0, 256, 192, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, luaBuffer + (256 * 192));
+		
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		
+		if (isShaderSupported)
+		{
+			glUniform1f(this->_uniformBacklightIntensity, 1.0f);
+		}
+		
+		switch (this->_output->GetPresenterProperties().mode)
+		{
+			case ClientDisplayMode_Main:
+			{
+				if (this->_output->IsSelectedDisplayEnabled(NDSDisplayID_Main))
+				{
+					glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Main]);
+					glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+				}
+				break;
+			}
+				
+			case ClientDisplayMode_Touch:
+			{
+				if (this->_output->IsSelectedDisplayEnabled(NDSDisplayID_Touch))
+				{
+					glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Touch]);
+					glDrawArrays(GL_TRIANGLE_STRIP, 4, 4);
+				}
+				break;
+			}
+				
+			case ClientDisplayMode_Dual:
+			{
+				const NDSDisplayID majorDisplayID = (this->_output->GetPresenterProperties().order == ClientDisplayOrder_MainFirst) ? NDSDisplayID_Main : NDSDisplayID_Touch;
+				const size_t majorDisplayVtx = (this->_output->GetPresenterProperties().order == ClientDisplayOrder_MainFirst) ? 8 : 12;
+				
+				switch (this->_output->GetPresenterProperties().layout)
+				{
+					case ClientDisplayLayout_Hybrid_2_1:
+					case ClientDisplayLayout_Hybrid_16_9:
+					case ClientDisplayLayout_Hybrid_16_10:
+					{
+						if (this->_output->IsSelectedDisplayEnabled(majorDisplayID))
+						{
+							glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[majorDisplayID]);
+							glDrawArrays(GL_TRIANGLE_STRIP, (GLint)majorDisplayVtx, 4);
+						}
+						break;
+					}
+						
+					default:
+						break;
+				}
+				
+				if (this->_output->IsSelectedDisplayEnabled(NDSDisplayID_Main))
+				{
+					glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Main]);
+					glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+				}
+				
+				if (this->_output->IsSelectedDisplayEnabled(NDSDisplayID_Touch))
+				{
+					glBindTexture(GL_TEXTURE_RECTANGLE_ARB, this->_texLuaOverlay[NDSDisplayID_Touch]);
+					glDrawArrays(GL_TRIANGLE_STRIP, 4, 4);
+				}
+				break;
+			}
+				
+			default:
+				break;
+		}
+		
+		glDisable(GL_BLEND);
+	}
+#endif
 	
 	glBindVertexArrayDESMUME(0);
 }

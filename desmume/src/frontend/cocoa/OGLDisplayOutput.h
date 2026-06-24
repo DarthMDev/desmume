@@ -355,6 +355,9 @@ protected:
 	GLuint _vboVertexID;
 	GLuint _vboTexCoordID;
 	
+	GLuint _texLuaOverlay[2];
+	bool _isLuaOverlayTexCreated;
+	
 	void _UpdateRotationScaleOGL();
 	void _UpdateVerticesOGL();
 	GLuint _ProcessDisplayByID_OGL(NDSDisplayID displayID, GLuint texID, size_t bufferIndex, bool useDeposterize, VideoFilterTypeID filterID, VideoFilter *cpuFilter, GLsizei &inoutWidth, GLsizei &inoutHeight);
