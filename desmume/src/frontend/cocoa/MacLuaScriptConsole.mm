@@ -21,6 +21,11 @@
 #include <string>
 
 #ifdef HAVE_LUA
+#include "../../driver.h"
+#include "macOS_driver.h"
+#endif
+
+#ifdef HAVE_LUA
 
 @interface LuaConsoleWindowController : NSObject <NSWindowDelegate, NSTextFieldDelegate>
 {
@@ -262,7 +267,9 @@ static int g_next_uid = 1;
 		self.filename = [path UTF8String];
 	}
 	[self startFileWatcher:[NSString stringWithUTF8String:self.filename.c_str()]];
-	RunLuaScriptFile(self.uid, self.filename.c_str());
+	if (driver != NULL) {
+		((macOS_driver *)driver)->QueueScript(self.uid, self.filename.c_str());
+	}
 }
 
 - (void)onStopClicked:(id)sender {
@@ -295,7 +302,9 @@ static int g_next_uid = 1;
 		
 		if (strongSelf.started && !strongSelf.filename.empty()) {
 			RequestAbortLuaScript(currentUid, "terminated to reload the script");
-			RunLuaScriptFile(currentUid, strongSelf.filename.c_str());
+			if (driver != NULL) {
+				((macOS_driver *)driver)->QueueScript(currentUid, strongSelf.filename.c_str());
+			}
 		}
 		
 		[strongSelf startFileWatcher:[NSString stringWithUTF8String:strongSelf.filename.c_str()]];

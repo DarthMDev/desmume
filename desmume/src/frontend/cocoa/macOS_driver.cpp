@@ -29,6 +29,52 @@
 #endif
 
 
+macOS_driver::macOS_driver()
+	: __mutexThreadExecute(NULL)
+	, __rwlockCoreExecute(NULL)
+	, __execControl(NULL)
+	, __displayOutputManager(NULL)
+{
+#ifdef HAVE_LUA
+	pthread_mutex_init(&__mutexQueue, NULL);
+	__queuedScriptUid = 0;
+	__hasQueuedScript = false;
+#endif
+}
+
+macOS_driver::~macOS_driver()
+{
+#ifdef HAVE_LUA
+	pthread_mutex_destroy(&__mutexQueue);
+#endif
+}
+
+#ifdef HAVE_LUA
+void macOS_driver::QueueScript(int uid, const char *filename)
+{
+	pthread_mutex_lock(&__mutexQueue);
+	__queuedScriptUid = uid;
+	__queuedScriptFile = filename ? filename : "";
+	__hasQueuedScript = true;
+	pthread_mutex_unlock(&__mutexQueue);
+}
+
+bool macOS_driver::GetQueuedScript(int &uid, std::string &filename)
+{
+	bool result = false;
+	pthread_mutex_lock(&__mutexQueue);
+	if (__hasQueuedScript)
+	{
+		uid = __queuedScriptUid;
+		filename = __queuedScriptFile;
+		__hasQueuedScript = false;
+		result = true;
+	}
+	pthread_mutex_unlock(&__mutexQueue);
+	return result;
+}
+#endif
+
 pthread_mutex_t* macOS_driver::GetCoreThreadMutexLock()
 {
 	return this->__mutexThreadExecute;
@@ -111,12 +157,9 @@ BaseDriver::eStepMainLoopResult macOS_driver::EMU_StepMainLoop(bool allowSleep, 
 		return ESTEP_DONE;
 	}
 
-	if (this->__execControl->GetExecutionBehavior() != ExecutionBehavior_Pause)
-	{
-		this->__execControl->SetExecutionBehavior(ExecutionBehavior_Pause);
-	}
-
-	pthread_rwlock_wrlock(this->__rwlockCoreExecute);
+	// We are already on the core thread, and the core thread already holds the write lock
+	// on rwlockCoreExecute and the mutex lock on mutexThreadExecute.
+	// Therefore, we must NOT lock them again here.
 
 	if (!disableCore)
 	{
@@ -136,14 +179,40 @@ BaseDriver::eStepMainLoopResult macOS_driver::EMU_StepMainLoop(bool allowSleep, 
 #endif
 	}
 
-	pthread_rwlock_unlock(this->__rwlockCoreExecute);
-
 	if (!disableUser && this->__displayOutputManager != NULL)
 	{
 		this->__displayOutputManager->SetNDSFrameInfoToAll(this->__execControl->GetNDSFrameInfo());
 	}
 
-	macOS_PumpEvents();
+	// Yield the locks so that the display views (which run on separate threads
+	// and need the read lock to access framebuffer data) and the UI thread can run.
+	if (this->__rwlockCoreExecute != NULL)
+	{
+		pthread_rwlock_unlock(this->__rwlockCoreExecute);
+	}
+	if (this->__mutexThreadExecute != NULL)
+	{
+		pthread_mutex_unlock(this->__mutexThreadExecute);
+	}
+
+	if (allowSleep)
+	{
+		usleep(16666);
+	}
+	else
+	{
+		usleep(1);
+	}
+
+	// Re-acquire the locks before returning control to the Lua engine.
+	if (this->__rwlockCoreExecute != NULL)
+	{
+		pthread_rwlock_wrlock(this->__rwlockCoreExecute);
+	}
+	if (this->__mutexThreadExecute != NULL)
+	{
+		pthread_mutex_lock(this->__mutexThreadExecute);
+	}
 
 	return ESTEP_DONE;
 }

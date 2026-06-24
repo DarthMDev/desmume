@@ -22,6 +22,10 @@
 
 #include "../../driver.h"
 
+#ifdef HAVE_LUA
+#include <string>
+#endif
+
 class ClientExecutionControl;
 
 class ClientDisplayViewOutputManager;
@@ -34,9 +38,16 @@ private:
 	ClientExecutionControl *__execControl;
 	ClientDisplayViewOutputManager *__displayOutputManager;
 	
+#ifdef HAVE_LUA
+	pthread_mutex_t __mutexQueue;
+	std::string __queuedScriptFile;
+	int __queuedScriptUid;
+	bool __hasQueuedScript;
+#endif
+	
 public:
-	macOS_driver() : __mutexThreadExecute(NULL), __rwlockCoreExecute(NULL), __execControl(NULL), __displayOutputManager(NULL) {}
-	virtual ~macOS_driver() {}
+	macOS_driver();
+	virtual ~macOS_driver();
 	
 	pthread_mutex_t* GetCoreThreadMutexLock();
 	void SetCoreThreadMutexLock(pthread_mutex_t *theMutex);
@@ -44,6 +55,11 @@ public:
 	void SetCoreExecuteRWLock(pthread_rwlock_t *theRwLock);
 	void SetExecutionControl(ClientExecutionControl *execControl);
 	void SetDisplayOutputManager(ClientDisplayViewOutputManager *displayOutputManager);
+	
+#ifdef HAVE_LUA
+	void QueueScript(int uid, const char *filename);
+	bool GetQueuedScript(int &uid, std::string &filename);
+#endif
 	
 	virtual void AVI_SoundUpdate(void *soundData, int soundLen);
 	virtual bool AVI_IsRecording();

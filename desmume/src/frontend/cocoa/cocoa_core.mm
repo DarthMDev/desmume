@@ -1240,6 +1240,13 @@ static void* RunCoreThread(void *arg)
 		
 		// Execute the frame and increment the frame counter.
 		pthread_rwlock_wrlock(&param->rwlockCoreExecute);
+#ifdef HAVE_LUA
+		int queuedUid;
+		std::string queuedFilename;
+		if (((macOS_driver *)driver)->GetQueuedScript(queuedUid, queuedFilename)) {
+			RunLuaScriptFile(queuedUid, queuedFilename.c_str());
+		}
+#endif
 		cheatManager->ApplyToMaster();
 		cheatManager->ApplyPendingInternalCheatWrites();
 #ifdef HAVE_LUA
